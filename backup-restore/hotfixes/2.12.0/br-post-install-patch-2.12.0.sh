@@ -1,11 +1,16 @@
 #!/bin/bash
 # Run this script on hub and spoke clusters to apply the latest hotfixes for 2.11.0 release.
-HOTFIX_NUMBER=2
+HOTFIX_NUMBER=3
 EXPECTED_VERSION=2.12.0
 
 source br-2.12.0patch-offline-mirror.sh
 
 patch_usage() {
+    echo "Patches the Fusion Backup & Restore install to 2.12.0 hotfix ${HOTFIX_NUMBER}".
+
+    echo "This command should be run on each hub and spoke of a Fusion Backup & Restore
+    echo install to successfully deploy hotfixes."
+
     echo "Usage: $0 < -hci | -sds | -help > [ -dryrun ] [-logdir <path>]"
     echo "Options:"
     echo "  -hci     Apply patch on HCI"
@@ -112,7 +117,7 @@ set_velero_image() {
     else
         # image=$2
         # current hotfix 1 only patches OADP-1.4
-        return
+        return 0
     fi
 
     echo "Patching OADP $OADP_VERSION"
@@ -127,6 +132,36 @@ set_velero_image() {
     fi
 }
 
+# mirror spoke values to ConfigMap guardian-configmap (#69600)
+# most of the time this can be resolved by forcing reconciles due to state-1 incorrect behavior
+resolve_hub_connection() {
+    # hub (bool) Whether the current cluster is a hub or spoke, this does not execute on hubs
+    HUB=$1
+
+    if [[ "${HUB}" == "true" ]]; then
+        return
+    fi
+
+    if (oc -n "${BR_NS}" get "configmap/guardian-configmap" -o yaml >$DIR/guardian-configmap.save.yaml); then
+        echo "Triggering reconcile of agent operator and mirroring cross-cluster communication configmap values"
+        AGENT_NAME=$(oc get dataprotectionagent -A --no-headers -o custom-columns=NS:metadata.name 2>/dev/null)
+        # twice to deal with the state-1 issue
+        oc label --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" forceupdate="true"
+        oc label --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" -forceupdate
+        oc label --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" forceupdate="true"
+        oc label --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" -forceupdate
+
+        # and mirror the required values to configmap guardian-configmap
+        CONNECTION_NAME=$(oc get --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" -o jsonpath='{.spec.connectionName}')
+        HUB_ENDPOINT_URL=$(oc get --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" -o jsonpath='{.spec.hubEndPointURL}')
+        HUB_CLUSTER_NAME=$(oc get --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" -o jsonpath='{.spec.hubClusterName}')
+        KAFKA_ENDPOINT=$(oc get --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" -o jsonpath='{.spec.transactionManager.kafkaService}')
+        KAFKA_PORT=$(oc get --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" -o jsonpath='{.spec.transactionManager.kafkaPort}')
+        [ -z "$DRY_RUN" ] oc set data --namespace "${BR_NS}" "configmap/guardian-configmap" connectionName="${CONNECTION_NAME}" hubEndPointURL="${HUB_ENDPOINT_URL}" hubClusterName="${HUB_CLUSTER_NAME}" kafka-service="${KAFKA_ENDPOINT}" kafka-port="${KAFKA_PORT}"
+        [ -n "$DRY_RUN" ] oc -n "$BR_NS" patch dataprotectionapplication.oadp.openshift.io velero --type='json' -p="${patch}" --dry-run=client -o yaml >$DIR/guardian-configmap.patch.yaml
+    fi
+}
+
 check_for_required_dependencies() {
     REQUIREDCOMMANDS=("oc" "jq")
     echo -e "Checking for required commands: ${REQUIREDCOMMANDS[*]}"
@@ -137,6 +172,19 @@ check_for_required_dependencies() {
             exit $IS_COMMAND
         fi
     done
+
+    echo -e "Checking for required version of oc 4.10+"
+    OC_VERSION=$(oc version --client -o json | jq -r '.clientVersion.gitVersion')
+    MAJOR=$(echo "${OC_VERSION}" | sed 's/v//' | cut -d. -f1)
+    MINOR=$(echo "${OC_VERSION}" | sed 's/v//' | cut -d. -f2)
+    if [ "${MAJOR}" -lt 4 ]; then
+        echo "Detected oc client version ${OC_VERSION}. Minimum 4.10"
+        exit 1
+    fi
+    if [ "${MINOR}" -lt 10 ]; then
+        echo "Detected oc client version ${OC_VERSION}. Minimum 4.10"
+        exit 1
+    fi
 }
 
 check_for_required_dependencies
@@ -149,18 +197,11 @@ if [ -z "$ISF_NS" ]; then
     exit 1
 fi
 
-BR_NS=$(oc get dataprotectionserver -A --no-headers -o custom-columns=NS:metadata.namespace 2>/dev/null)
-if [ -n "$BR_NS" ]
- then
- HUB=true
+if BR_NS=$(oc get dataprotectionserver -A --no-headers -o custom-columns=NS:metadata.namespace 2>/dev/null) && [ -n "$BR_NS" ]
+  then 
+  HUB=true
 else
-   BR_NS=$(oc get dataprotectionagent -A --no-headers -o custom-columns=NS:metadata.namespace 2>/dev/null)
-fi
-
-if [ -z "$BR_NS" ] 
- then
-    echo "ERROR: No B&R installation found. Exiting."
-    exit 1
+  BR_NS=$(oc get dataprotectionagent -A --no-headers -o custom-columns=NS:metadata.namespace 2>/dev/null)
 fi
 
 AGENTCSV=$(oc -n "$BR_NS" get csv -o name | grep ibm-dataprotectionagent)
@@ -173,6 +214,9 @@ elif [[ $VERSION != $EXPECTED_VERSION* ]]; then
     echo "This patch applies to B&R version $EXPECTED_VERSION only, you have $VERSION. Skipped updates"
     exit 0
 fi
+
+# make hub/cluster spoke connection settings to reconcile and resolve to the configmap
+resolve_hub_connection $HUB
 
 # update transaction-manager
 tm_image=$(build_icr_path ${TRANSACTIONMANAGER})
@@ -189,8 +233,8 @@ oadp_velero_14=$(build_icr_path ${OADP_VELERO_14})
 oadp_velero_15=""
 set_velero_image ${oadp_velero_14} ${oadp_velero_15}
 
-echo "Please verify that the pods for the following deployment have successfully restarted for Openshift 4.18 and lower:"
+echo "Please verify that the pods for the following deployment have successfully restarted for OpenShift 4.18 and lower:"
 printf "  %-${#BR_NS}s: %s\n" "$BR_NS" "velero"
 
-echo "Please verify that the pods for the following daemonsets have successfully restarted for Openshift 4.18 and lower:"
+echo "Please verify that the pods for the following daemonsets have successfully restarted for OpenShift 4.18 and lower:"
 printf "  %-${#BR_NS}s: %s\n" "$BR_NS" "node-agent"

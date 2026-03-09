@@ -308,6 +308,19 @@ for COMMAND in "${REQUIREDCOMMANDS[@]}"; do
     fi
 done
 
+echo -e "Checking for required version of oc 4.10+"
+OC_VERSION=$(oc version --client -o json | jq -r '.clientVersion.gitVersion')
+MAJOR=$(echo "${OC_VERSION}" | sed 's/v//' | cut -d. -f1)
+MINOR=$(echo "${OC_VERSION}" | sed 's/v//' | cut -d. -f2)
+if [ "${MAJOR}" -lt 4 ]; then
+    echo "Detected oc client version ${OC_VERSION}. Minimum 4.10"
+    exit 1
+fi
+if [ "${MINOR}" -lt 10 ]; then
+    echo "Detected oc client version ${OC_VERSION}. Minimum 4.10"
+    exit 1
+fi
+
 oc whoami > /dev/null || ( 
     echo "Not logged in to your cluster"
     exit 1
