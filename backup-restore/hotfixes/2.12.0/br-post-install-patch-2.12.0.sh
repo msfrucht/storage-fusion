@@ -147,9 +147,9 @@ resolve_hub_connection() {
         AGENT_NAME=$(oc get dataprotectionagent -A --no-headers -o custom-columns=NS:metadata.name 2>/dev/null)
         # twice to deal with the state-1 issue
         oc label --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" forceupdate="true"
-        oc label --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" -forceupdate
+        oc label --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" forceupdate-
         oc label --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" forceupdate="true"
-        oc label --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" -forceupdate
+        oc label --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" forceupdate-
 
         # and mirror the required values to configmap guardian-configmap
         CONNECTION_NAME=$(oc get --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" -o jsonpath='{.spec.connectionName}')
