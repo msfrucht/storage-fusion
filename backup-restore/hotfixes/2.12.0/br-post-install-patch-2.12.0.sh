@@ -139,7 +139,7 @@ resolve_hub_connection() {
     HUB=$1
 
     if [[ "${HUB}" == "true" ]]; then
-        return
+        return 0
     fi
 
     if (oc -n "${BR_NS}" get "configmap/guardian-configmap" -o yaml >$DIR/guardian-configmap.save.yaml); then
