@@ -233,7 +233,7 @@ oadp_velero_14=$(build_icr_path ${OADP_VELERO_14})
 oadp_velero_15=""
 set_velero_image ${oadp_velero_14} ${oadp_velero_15}
 
-echo "Please verify that the pods for the following deployment have successfully restarted for OpenShift 4.18 and lower:"
+echo "Please verify that the pods for the following deployment have successfully restarted for Openshift 4.18 and lower:"
 printf "  %-${#BR_NS}s: %s\n" "$BR_NS" "velero"
 
 echo "Please verify that the pods for the following daemonsets have successfully restarted for OpenShift 4.18 and lower:"
