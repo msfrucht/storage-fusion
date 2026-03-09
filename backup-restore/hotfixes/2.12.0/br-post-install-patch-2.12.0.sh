@@ -157,8 +157,8 @@ resolve_hub_connection() {
         HUB_CLUSTER_NAME=$(oc get --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" -o jsonpath='{.spec.hubClusterName}')
         KAFKA_ENDPOINT=$(oc get --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" -o jsonpath='{.spec.transactionManager.kafkaService}')
         KAFKA_PORT=$(oc get --namespace "${BR_NS}" "dataprotectionagent/${AGENT_NAME}" -o jsonpath='{.spec.transactionManager.kafkaPort}')
-        [ -z "$DRY_RUN" ] oc set data --namespace "${BR_NS}" "configmap/guardian-configmap" connectionName="${CONNECTION_NAME}" hubEndPointURL="${HUB_ENDPOINT_URL}" hubClusterName="${HUB_CLUSTER_NAME}" kafka-service="${KAFKA_ENDPOINT}" kafka-port="${KAFKA_PORT}"
-        [ -n "$DRY_RUN" ] oc -n "$BR_NS" patch dataprotectionapplication.oadp.openshift.io velero --type='json' -p="${patch}" --dry-run=client -o yaml >$DIR/guardian-configmap.patch.yaml
+        [ -z "$DRY_RUN" ] && oc set data --namespace "${BR_NS}" "configmap/guardian-configmap" connectionName="${CONNECTION_NAME}" hubEndPointURL="${HUB_ENDPOINT_URL}" hubClusterName="${HUB_CLUSTER_NAME}" kafka-service="${KAFKA_ENDPOINT}" kafka-port="${KAFKA_PORT}"
+        [ -n "$DRY_RUN" ] && oc -n "$BR_NS" patch dataprotectionapplication.oadp.openshift.io velero --type='json' -p="${patch}" --dry-run=client -o yaml >$DIR/guardian-configmap.patch.yaml
     fi
 }
 
