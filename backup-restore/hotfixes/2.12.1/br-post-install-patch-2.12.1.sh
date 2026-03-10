@@ -79,7 +79,7 @@ check_cmd ()
 
 update_hotfix_configmap() {
     hotfix=$1
-    applied_on=$(date '+%Y-%m-%dT%T')
+    applied_on=$(date '+%Y-%m-%dT%TZ')
     if (oc -n "$BR_NS" get configmap bnr-hotfixes -o yaml 1>$DIR/bnr-hotfixes.save.yaml 2>&1); then
         patch="[{\"op\": \"add\", \"path\": \"/data/${hotfix}-applied-on\", \"value\": \"${applied_on}\"}]"
         oc -n "$BR_NS" patch configmap bnr-hotfixes --type=json -p "${patch}" "${DRY_RUN}" -o yaml >$DIR/bnr-hotfixes.patch.yaml
