@@ -14,7 +14,7 @@ patch_usage() {
     echo "  -hci     Apply patch on HCI"
     echo "  -sds     Apply patch on SDS"
     echo "  -help    Display usage"
-    echo "  -dryrun  Run without applying fixes"
+    echo "  -dryrun  Run without applying fixes. Proposed patches will be written to logdir."
     echo "  -logdir  Directory to log output, patches, and saved YAMLs. Defaults to /tmp/br-post-install-patch-${EXPECTED_VERSION}"
 }
 set -e
